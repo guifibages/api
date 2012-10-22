@@ -22,15 +22,33 @@
 
 import ldap
 from base64 import urlsafe_b64encode
-from os import urandom
+from random import randint
 from datetime import datetime, timedelta
 from flask import Flask, url_for, request, Response, json
 app = Flask(__name__)
 
 def generate_otp():
-    return urlsafe_b64encode(urandom(20))
+    """Return a 6 digits random One Time Password"""
+    return "%06d" % randint(1,999999)
 
+def read_pac(view="internet"):
+    """Read the specified pac file from disk and return it as a string
+
+    Arguments:
+    view -- the intended view (default: "internet")
+    """
+    try:
+        with open('static/%s-pac.js' % view,'r') as pac_file:
+            return pac_file.read()
+    except IOError, e:
+        if e.errno == 2:
+            return
+
+
+# We use this as an argument to json.dumps to convert datetime objects to json
 dthandler = lambda obj: obj.isoformat() if isinstance(obj, datetime) else None
+
+
 def response(msg, status=200):
     return Response(json.dumps(msg, default=dthandler), status=status)
 
@@ -109,8 +127,7 @@ def login():
         sessions[username][ip] = result
         # We add the pac after saving the result to the session
         if ip[0:3] != '10.':
-            with open('pac.js','r') as pac_file:
-                result['pac'] = pac_file.read()
+            result['pac'] = read_pac('internet')
         return response(result)
 
 if __name__ == "__main__":
