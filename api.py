@@ -21,12 +21,57 @@
 
 
 import ldap
-from base64 import urlsafe_b64encode
+import ldap.modlist as modlist
+
+import copy
+from base64 import urlsafe_b64encode, b64encode
 from random import randint
 from datetime import datetime, timedelta
 from flask import Flask, url_for, request, Response, json
 app = Flask(__name__)
 
+def validate_login(request):
+    try:
+        username = request.form['username']
+        password = request.form['password']
+        if len(username)==0:
+            return response({'error': 'Invalid credentials'} ,status=401)
+    except KeyError, error:
+        print "KeyError %s" % request.form
+        return Response('Wrong request' ,status=400)
+    user_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % username
+    l = ldap_bind(user_dn, password)
+    return (user_dn, l, username, password)
+
+def modify_ldap_property(l, modified_dn, old, new):
+    try:
+        ldif = modlist.modifyModlist(old, new)    
+        l.modify_s(modified_dn, ldif)
+        return (True, None)
+    except ldap.INSUFFICIENT_ACCESS:
+        error = {"code": 401, "error": "Insufficient access", "action": new}
+        return (False, error)
+    except:
+        raise
+        return False
+
+def ldap_bind(binddn, password):
+    l = ldap.initialize("ldaps://aaa.guifibages.net:636")
+    l.simple_bind_s(binddn,password)
+    return l
+    """
+    try:
+        l = ldap.initialize("ldaps://aaa.guifibages.net:636")
+        l.simple_bind_s(binddn,password)
+        return l
+    except ldap.INVALID_CREDENTIALS:
+        return response({'error': 'Invalid credentials'} ,status=401)
+    except ldap.SERVER_DOWN:
+        return response({'error': "Can't connect to server"} ,status=500)
+    except ldap.LDAPError, error_message:
+        print "Excepcion: %s" % error_message
+        return response({'error': "LDAPError: %s" % error_message} ,status=500)
+    """
 def generate_otp():
     """Return a 6 digits random One Time Password"""
     return "%06d" % randint(1,999999)
@@ -79,58 +124,68 @@ def validate_otp(username):
 
 @app.route('/api/user/<username>', methods = ['GET'])
 def user_info(username):
-        global sessions
-        if username in sessions:
-                print "Seguimos get"
-                ret = {}
-                for ip, value in sessions[username].items():
-                        timestamp = value['ts']
-                        if datetime.now()-timestamp < timedelta(seconds=30):
-                            if is_trusted_server(get_request_ip(request)):
-                                ret[ip] = value
-                            else:
-                                ret[ip] = True
-                return response(ret)
-        else:
-            return response({'error': 'Not found'} ,status=404)
+    global sessions
+    user_dn, l, username, password = validate_login(request)
+
+@app.route('/api/user/<updated_user>/update', methods = ['POST'])
+def update_user(updated_user):
+    result = {}
+    try:
+        user_dn, l, username, password = validate_login(request)
+    except ldap.INVALID_CREDENTIALS:
+        return response({'error': 'Invalid credentials'} ,status=401)
+    except ldap.SERVER_DOWN:
+        return response({'error': "Can't connect to server"} ,status=500)
+    except:
+        return response({'error': "shit happened"}, 500)
+    update_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % updated_user
+    original_record = l.search_s(update_dn, ldap.SCOPE_BASE, 'objectClass=*')[0][1]
+    modified_record = copy.deepcopy(original_record)
+
+    for field in request.form:
+        if field in ['username', 'password']:
+            continue
+        new_value = str(request.form[field])
+        if field not in original_record or original_record[field] != new_value and new_value not in original_record[field]:
+            modified_record[field] = new_value
+
+    if original_record == modified_record:
+        return response("No changes")
+
+    result['original_record'] = original_record
+    result['modified_record'] = modified_record
+    modified, error = modify_ldap_property(l, update_dn, original_record, modified_record)
+    if modified:
+        return response(result)
+    else:
+        return response(error, error['code'])
 
 @app.route('/api/login', methods = ['POST'])
 def login():
-        global sessions
-        result = {}
-        try:
-            username = request.form['username']
-            password = request.form['password']
-            if len(username)==0:
-                return response({'error': 'Invalid credentials'} ,status=401)
-        except KeyError, error:
-            print "KeyError %s" % request.form
-            return Response('Wrong request' ,status=400)
-        user_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % username
-        try:
-                l = ldap.initialize("ldaps://aaa.guifibages.net:636")
-                l.simple_bind_s(user_dn,password)
-        except ldap.INVALID_CREDENTIALS:
-                return response({'error': 'Invalid credentials'} ,status=401)
-        except ldap.SERVER_DOWN:
-                return response({'error': "Can't connect to server"} ,status=500)
-        except ldap.LDAPError, error_message:
-                print "Excepcion: %s" % error_message
-                return response({'error': "LDAPError: %s" % error_message} ,status=500)
+    global sessions
+    result = {}
+    try:
+        user_dn, l, username, password = validate_login(request)
+    except ldap.INVALID_CREDENTIALS:
+        return response({'error': 'Invalid credentials'} ,status=401)
+    except ldap.SERVER_DOWN:
+        return response({'error': "Can't connect to server"} ,status=500)
+    except:
+        return response({'error': "shit happened"}, 500)
 
-        ip = get_request_ip(request)
-
-        if not username in sessions:
-                sessions[username] = {}
-        result['otp'] = generate_otp()
-        result['ts'] = datetime.now()
-        sessions[username][ip] = result
-        # We add the pac after saving the result to the session
-        if ip[0:3] != '10.':
-            result['pac'] = read_pac('internet')
-        return response(result)
+    ip = get_request_ip(request)
+    
+    if not username in sessions:
+            sessions[username] = {}
+    result['otp'] = generate_otp()
+    result['ts'] = datetime.now()
+    sessions[username][ip] = result
+    # We add the pac after saving the result to the session
+    if ip[0:3] != '10.':
+        result['pac'] = read_pac('internet')
+    return response(result)
 
 if __name__ == "__main__":
-        global sessions
-        sessions = dict()
-        app.run(debug=True)
+    global sessions
+    sessions = dict()
+    app.run(debug=True)
