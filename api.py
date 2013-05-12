@@ -28,24 +28,50 @@ from base64 import urlsafe_b64encode, b64encode
 from random import randint
 from datetime import datetime, timedelta
 from flask import Flask, url_for, request, Response, json
+
+from xdomain import crossdomain
+from ssha import ssha
+
 app = Flask(__name__)
 
-def validate_login(request):
+def validate_login(form):
+    print "vlcero"
+    print form
     try:
-        username = request.form['username']
-        password = request.form['password']
+        print "vluno"
+        print form
+        username = form['username']
+        print "vldos"
+        password = form['password']
         if len(username)==0:
             return response({'error': 'Invalid credentials'} ,status=401)
     except KeyError, error:
-        print "KeyError %s" % request.form
+        print "KeyError %s" % form
         return Response('Wrong request' ,status=400)
+    except:
+        print "vlcuatro"
+        print form
+        raise
+    print "vltres"
+
     user_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % username
     l = ldap_bind(user_dn, password)
     return (user_dn, l, username, password)
+def add_record(l,dn, new):
+    try:
+        ldif = modlist.addModlist(new)
+        l.add_s(dn, ldif)
+        return (True, None)
+    except ldap.INSUFFICIENT_ACCESS:
+        error = {"code": 401, "error": "Insufficient access", "action": new}
+        return (False, error)
+    except:
+        raise
+        return False
 
 def modify_ldap_property(l, modified_dn, old, new):
     try:
-        ldif = modlist.modifyModlist(old, new)    
+        ldif = modlist.modifyModlist(old, new)
         l.modify_s(modified_dn, ldif)
         return (True, None)
     except ldap.INSUFFICIENT_ACCESS:
@@ -93,6 +119,14 @@ def read_pac(view="internet"):
 # We use this as an argument to json.dumps to convert datetime objects to json
 dthandler = lambda obj: obj.isoformat() if isinstance(obj, datetime) else None
 
+def user_access(l, user_dn):
+    result = l.search_s(user_dn, ldap.SCOPE_SUBTREE, 'objectClass=*', ['memberOf'])[0][1]
+    print user_dn
+    print result
+    if 'memberOf' in result and "cn=ldapAdmin,ou=Groups,ou=auth,dc=guifibages,dc=net" in result['memberOf']:
+        return "admin"
+    else:
+        return "user"
 
 def response(msg, status=200):
     return Response(json.dumps(msg, default=dthandler), status=status)
@@ -109,6 +143,7 @@ def is_trusted_server(ip):
     return ip in servers
 
 @app.route('/api/user/<username>/otp', methods = ['POST'])
+@crossdomain('*')
 def validate_otp(username):
     if not 'password' in request.form or not 'ip' in request.form:
         return response({'error': 'Invalid credentials'} ,status=401)
@@ -123,29 +158,76 @@ def validate_otp(username):
 
 
 @app.route('/api/user/<username>', methods = ['GET'])
+@crossdomain('*')
 def user_info(username):
     global sessions
-    user_dn, l, username, password = validate_login(request)
+    user_dn, l, username, password = validate_login(request.form)
 
-@app.route('/api/user/<updated_user>/update', methods = ['POST'])
-def update_user(updated_user):
-    result = {}
+@app.route('/api/users', methods = ['POST'])
+@crossdomain('*')
+def list_users():
     try:
-        user_dn, l, username, password = validate_login(request)
+        user_dn, l, username, password = validate_login(request.form)
     except ldap.INVALID_CREDENTIALS:
         return response({'error': 'Invalid credentials'} ,status=401)
     except ldap.SERVER_DOWN:
         return response({'error': "Can't connect to server"} ,status=500)
     except:
         return response({'error': "shit happened"}, 500)
-    update_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % updated_user
-    original_record = l.search_s(update_dn, ldap.SCOPE_BASE, 'objectClass=*')[0][1]
+    try:
+        result = l.search_s("ou=Users,ou=auth,dc=guifibages,dc=net", ldap.SCOPE_SUBTREE, 'objectClass=person', ['uid', 'cn', 'uidNumber'])
+    except ldap.NO_SUCH_OBJECT:
+        return response({'error': 'Unauthorized'} ,status=401)
+    
+    return response(result)
+
+@app.route('/api/user/<target_user>/get', methods = ['POST'])
+@crossdomain('*')
+def get_user(target_user):
+    print "Uno"
+    try:
+        user_dn, l, username, password = validate_login(request.form)
+    except ldap.INVALID_CREDENTIALS:
+        return response({'error': 'Invalid credentials'} ,status=401)
+    except ldap.SERVER_DOWN:
+        return response({'error': "Can't connect to server"} ,status=500)
+    except:
+        return response({'error': "shit happened"}, 500)
+
+    print "Dos"
+    target_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % target_user
+
+    try:
+        result = l.search_s(target_dn, ldap.SCOPE_SUBTREE, 'objectClass=*')[0][1]
+    except ldap.NO_SUCH_OBJECT:
+        return response({'error': 'Not found'} ,status=404)
+    print "tres"
+
+    result['access_level'] = user_access(l, user_dn)
+    print "cuatro"
+    return response(result)
+
+@app.route('/api/user/<target_user>/update', methods = ['POST'])
+@crossdomain('*')
+def update_user(target_user):
+    result = {}
+    try:
+        user_dn, l, username, password = validate_login(request.form)
+    except ldap.INVALID_CREDENTIALS:
+        return response({'error': 'Invalid credentials'} ,status=401)
+    except ldap.SERVER_DOWN:
+        return response({'error': "Can't connect to server"} ,status=500)
+    except:
+        return response({'error': "shit happened"}, 500)
+    update_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % target_user
+    original_record = l.search_s(update_dn, ldap.SCOPE_BASE)[0][1]
     modified_record = copy.deepcopy(original_record)
 
     for field in request.form:
         if field in ['username', 'password']:
             continue
-        new_value = str(request.form[field])
+        new_value = request.form[field]
+        new_value = new_value.encode('utf-8')
         if field not in original_record or original_record[field] != new_value and new_value not in original_record[field]:
             modified_record[field] = new_value
 
@@ -161,11 +243,12 @@ def update_user(updated_user):
         return response(error, error['code'])
 
 @app.route('/api/login', methods = ['POST'])
+@crossdomain('*')
 def login():
     global sessions
     result = {}
     try:
-        user_dn, l, username, password = validate_login(request)
+        user_dn, l, username, password = validate_login(request.form)
     except ldap.INVALID_CREDENTIALS:
         return response({'error': 'Invalid credentials'} ,status=401)
     except ldap.SERVER_DOWN:
@@ -177,6 +260,7 @@ def login():
     
     if not username in sessions:
             sessions[username] = {}
+    result['access_level'] = user_access(l, user_dn)
     result['otp'] = generate_otp()
     result['ts'] = datetime.now()
     sessions[username][ip] = result
@@ -188,4 +272,4 @@ def login():
 if __name__ == "__main__":
     global sessions
     sessions = dict()
-    app.run(debug=True)
+    app.run(debug=True,port=8050)
