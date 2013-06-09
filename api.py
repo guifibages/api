@@ -35,13 +35,11 @@ from ssha import ssha
 app = Flask(__name__)
 
 def validate_login(form):
-    print "vlcero"
-    print form
+
+    print "validate_login: %s" % form
+
     try:
-        print "vluno"
-        print form
         username = form['username']
-        print "vldos"
         password = form['password']
         if len(username)==0:
             return response({'error': 'Invalid credentials'} ,status=401)
@@ -49,14 +47,14 @@ def validate_login(form):
         print "KeyError %s" % form
         return Response('Wrong request' ,status=400)
     except:
-        print "vlcuatro"
-        print form
+
         raise
-    print "vltres"
+
 
     user_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % username
     l = ldap_bind(user_dn, password)
     return (user_dn, l, username, password)
+
 def add_record(l,dn, new):
     try:
         ldif = modlist.addModlist(new)
@@ -68,6 +66,20 @@ def add_record(l,dn, new):
     except:
         raise
         return False
+
+def increase_current_uidnumber(l):
+    update_dn = "uid=template.user,ou=Users,ou=auth,dc=guifibages,dc=net"
+    original_record = l.search_s(update_dn, ldap.SCOPE_BASE)[0][1]
+    modified_record = copy.deepcopy(original_record)
+    modified_record['uidNumber'][0] = str(int(modified_record['uidNumber'][0])+1)
+    modified, error = modify_ldap_property(l, update_dn, original_record, modified_record)
+    if modified:
+        print "increase_current_uidnumber correct"
+        return True
+    else:
+        print "couldn't increase_current_uidnumber"
+        return False
+
 
 def modify_ldap_property(l, modified_dn, old, new):
     try:
@@ -121,8 +133,7 @@ dthandler = lambda obj: obj.isoformat() if isinstance(obj, datetime) else None
 
 def user_access(l, user_dn):
     result = l.search_s(user_dn, ldap.SCOPE_SUBTREE, 'objectClass=*', ['memberOf'])[0][1]
-    print user_dn
-    print result
+    print "user_access:\n\t%s\n\t%s" % (user_dn, result)
     if 'memberOf' in result and "cn=ldapAdmin,ou=Groups,ou=auth,dc=guifibages,dc=net" in result['memberOf']:
         return "admin"
     else:
@@ -184,7 +195,7 @@ def list_users():
 @app.route('/api/user/<target_user>/get', methods = ['POST'])
 @crossdomain('*')
 def get_user(target_user):
-    print "Uno"
+
     try:
         user_dn, l, username, password = validate_login(request.form)
     except ldap.INVALID_CREDENTIALS:
@@ -194,22 +205,22 @@ def get_user(target_user):
     except:
         return response({'error': "shit happened"}, 500)
 
-    print "Dos"
+
     target_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % target_user
 
     try:
         result = l.search_s(target_dn, ldap.SCOPE_SUBTREE, 'objectClass=*')[0][1]
     except ldap.NO_SUCH_OBJECT:
         return response({'error': 'Not found'} ,status=404)
-    print "tres"
+
 
     result['access_level'] = user_access(l, user_dn)
-    print "cuatro"
+
     return response(result)
 
-@app.route('/api/user/<target_user>/update', methods = ['POST'])
+@app.route('/api/user/new', methods = ['POST'])
 @crossdomain('*')
-def update_user(target_user):
+def add_user():
     result = {}
     try:
         user_dn, l, username, password = validate_login(request.form)
@@ -219,6 +230,60 @@ def update_user(target_user):
         return response({'error': "Can't connect to server"} ,status=500)
     except:
         return response({'error': "shit happened"}, 500)
+    update_dn = "uid=template.user,ou=Users,ou=auth,dc=guifibages,dc=net"
+    original_record = l.search_s(update_dn, ldap.SCOPE_BASE)[0][1]
+    modified_record = copy.deepcopy(original_record)
+    print request.form
+    check_search = '(uid=%s)' % request.form['newuser_uid']
+    print "add_user -1"
+    check = l.search_s("ou=Users,ou=auth,dc=guifibages,dc=net", ldap.SCOPE_SUBTREE, check_search, ['uid', 'cn', 'uidNumber'])
+    print "add_user"
+    print "add_user: %s (%d)" % (check, len(check))
+    if len(check) > 0:
+
+        return  response("User already exists %s" % request.form['newuser_uid'], 409)
+
+
+    for field in request.form:
+        if field in ['username', 'password']:
+            continue
+        new_value = request.form[field]
+        new_value = new_value.encode('utf-8')
+        if field == 'userPassword':
+            new_value = ssha(request.form[field])
+        if field[0:8] == 'newuser_':
+            modified_record[field[8:]] = new_value
+            continue
+        if field not in original_record or original_record[field] != new_value and new_value not in original_record[field]:
+            modified_record[field] = new_value
+    modified_record['homeDirectory'] = "/guifibages/users/%s" % modified_record['uid']
+
+    print "Minga longa %s" % modified_record
+
+    new_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % modified_record['uid']
+    modified, error = add_record(l, new_dn, modified_record)
+    print "Result:\n modified: %s\n error: %s" % (modified, error)
+    if modified:
+        increase_current_uidnumber(l)
+        return response(modified_record)
+    else:
+        return response(error, error['code'])
+
+
+@app.route('/api/user/<target_user>/update', methods = ['POST'])
+@crossdomain('*')
+def update_user(target_user):
+    print "update_user:\n\t%s" % request.form
+    result = {}
+    try:
+        user_dn, l, username, password = validate_login(request.form)
+    except ldap.INVALID_CREDENTIALS:
+        return response({'error': 'Invalid credentials'} ,status=401)
+    except ldap.SERVER_DOWN:
+        return response({'error': "Can't connect to server"} ,status=500)
+    except:
+        return response({'error': "shit happened"}, 500)
+
     update_dn = "uid=%s,ou=Users,ou=auth,dc=guifibages,dc=net" % target_user
     original_record = l.search_s(update_dn, ldap.SCOPE_BASE)[0][1]
     modified_record = copy.deepcopy(original_record)
@@ -228,6 +293,8 @@ def update_user(target_user):
             continue
         new_value = request.form[field]
         new_value = new_value.encode('utf-8')
+    	if field == 'userPassword':
+    	    new_value = ssha(request.form[field])
         if field not in original_record or original_record[field] != new_value and new_value not in original_record[field]:
             modified_record[field] = new_value
 
