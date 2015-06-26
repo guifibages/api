@@ -27,8 +27,8 @@ app = Flask(__name__)
 
 
 def telegram(action, payload):
-    token = ""
     url = "https://api.telegram.org/bot%s/%s" % (token, action)
+    app.logger.debug("url: %s" % url)
     return client.post(url, data=payload)
 
 
@@ -45,7 +45,7 @@ class Message:
             self.text = self.message['text'].split(None, 1)[1]
         else:
             self.text = self.message['text']
-        if self.text[0] != "/":
+        if self.text[0] != "/" or " " not in self.text:
             return
         if "client" in globals():
             sendChatAction(self.chat, "typing")
@@ -86,5 +86,7 @@ except:
 """
 
 if __name__ == "__main__":
+    with open("token", "r") as myfile:
+        token = myfile.read().strip()
     client = requests.Session()
     app.run(debug=True, port=8050, host="0.0.0.0")
