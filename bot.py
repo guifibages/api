@@ -26,6 +26,19 @@ import requests
 app = Flask(__name__)
 
 
+def getToken():
+    if "client" in globals():
+        try:
+            r = client.get("http://172.17.42.1:4001/v2/keys/guifibages.net/bot/token")
+            token = r.json['node']['value']
+        except:
+            pass
+        if "token" not in locals():
+            with open("token", "r") as myfile:
+                token = myfile.read().strip()
+    return token
+
+
 def telegram(action, payload):
     url = "https://api.telegram.org/bot%s/%s" % (token, action)
     app.logger.debug("url: %s" % url)
@@ -38,7 +51,11 @@ class Message:
         self.chat = self.message['chat']['id']
         self.is_group = "title" in self.message['chat']
         self.commands = {'ping': ['ping', '-c 2']}
-        self.parse()
+        try:
+            self.parse()
+        except:
+            app.logger.error("Cannot parse:\n %s", self.message)
+
 
     def parse(self):
         if self.is_group:
@@ -86,7 +103,6 @@ except:
 """
 
 if __name__ == "__main__":
-    with open("token", "r") as myfile:
-        token = myfile.read().strip()
     client = requests.Session()
+    token = getToken()
     app.run(debug=True, port=8050, host="0.0.0.0")
