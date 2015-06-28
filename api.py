@@ -95,7 +95,7 @@ def modify_ldap_property(l, modified_dn, old, new):
 
 def ldap_bind(binddn, password):
     l = ldap.initialize("ldaps://aaa.guifibages.net:636")
-    l.simple_bind_s(binddn,password)
+    l.simple_bind_s(binddn, password)
     return l
     """
     try:
@@ -110,6 +110,8 @@ def ldap_bind(binddn, password):
         print "Excepcion: %s" % error_message
         return response({'error': "LDAPError: %s" % error_message} ,status=500)
     """
+
+
 def generate_otp():
     """Return a 6 digits random One Time Password"""
     return "%06d" % randint(1,999999)
@@ -339,4 +341,4 @@ def login():
 if __name__ == "__main__":
     global sessions
     sessions = dict()
-    app.run(debug=True,port=8050)
+    app.run(debug=True, port=8060, host="0.0.0.0")
