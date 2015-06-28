@@ -31,6 +31,9 @@ app = Flask(__name__)
 def ping(ip, count = 2, format = "json"):
     try:
         address = ipaddress.ip_address(ip)
+        command = ping
+        if isinstance(address, ipaddress.IPv6Address):
+            command = "ping6"
         if (isinstance(address, ipaddress.IPv4Address) and
             not address.is_private):
             return jsonify(result=-1, text="Can only ping private IPv4 addresses (%s)" % ip)
@@ -38,7 +41,7 @@ def ping(ip, count = 2, format = "json"):
         return jsonify(result=-1, text="Invalid IP address: %s" % ip)
 
     try:
-        text = subprocess.check_output(['ping', '-c %d' % int(count), ip], universal_newlines=True)
+        text = subprocess.check_output([command, '-c %d' % int(count), ip], universal_newlines=True)
         result = 0
     except subprocess.CalledProcessError as e:
         text = str(e.output)
