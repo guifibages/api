@@ -1,4 +1,3 @@
-python-ldap
 flask
 requests
 beautifulsoup4
