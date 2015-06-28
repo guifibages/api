@@ -32,8 +32,6 @@ def getToken():
             r = client.get("http://172.17.42.1:4001/v2/keys/guifibages.net/bot/token")
             token = r.json['node']['value']
         except:
-            pass
-        if "token" not in locals():
             with open("token", "r") as myfile:
                 token = myfile.read().strip()
     return token
@@ -50,12 +48,11 @@ class Message:
         vars(self).update(d)
         self.chat = self.message['chat']['id']
         self.is_group = "title" in self.message['chat']
-        self.commands = {'ping': ['ping', '-c 2']}
+        self.commands = ['ping']
         try:
             self.parse()
-        except:
-            app.logger.error("Cannot parse:\n %s", self.message)
-
+        except Exception as e:
+            app.logger.error("Cannot parse:\n %s\n %s", self.message, e)
 
     def parse(self):
         if self.is_group:
@@ -64,20 +61,24 @@ class Message:
             self.text = self.message['text']
         if self.text[0] != "/" or " " not in self.text:
             return
-        if "client" in globals():
-            sendChatAction(self.chat, "typing")
         self.command, self.args = self.text.split(None, 1)
         self.command = self.command[1:].lower()
-        if self.command in self.commands:
-            cli = self.commands[self.command]
-            cli.append(self.args)
-            try:
-                self.result = subprocess.check_output(cli, )
-            except Exception, e:
-                self.result = e.output
+        try:
+            print("Trying", self.command)
+            getattr(self, self.command)()
             if "client" in globals():
-                sendMessage(self.chat, self.result)
+                sendChatAction(self.chat, "typing")
+        except AttributeError:
+            print("Exception on", self.command)
+            sendMessage(self.chat,
+                        "{0}: command not found".format(self.command))
 
+    def ping(self):
+        result = client.get("https://hq.xin.cat/gb/api/ping/{0}"
+                            .format(self.args)).json()
+        sendMessage(self.chat, "ping: {0}".format(result))        
+
+        
 def sendMessage(chat_id, text):
     payload = {'chat_id': chat_id, 'text': text}
     result = telegram('sendMessage', payload)
