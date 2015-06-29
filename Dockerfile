@@ -1,2 +1,2 @@
-FROM python:3-onbuild
+FROM guifibages/python
 CMD [ "python", "./api.py" ]
