@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import subprocess
-
 from flask import Flask, request
 import requests
 
@@ -48,7 +46,7 @@ class Message:
         vars(self).update(d)
         self.chat = self.message['chat']['id']
         self.is_group = "title" in self.message['chat']
-        self.commands = ['ping']
+        self.commands = ['ping', 'traceroute']
         try:
             self.parse()
         except Exception as e:
@@ -76,14 +74,19 @@ class Message:
     def ping(self):
         result = client.get("https://hq.xin.cat/gb/api/ping/{0}"
                             .format(self.args)).json()
-        sendMessage(self.chat, "ping: {0}".format(result))        
+        sendMessage(self.chat, "ping: {0}".format(result))
 
-        
+    def traceroute(self):
+        result = client.get("https://hq.xin.cat/gb/api/traceroute/{0}"
+                            .format(self.args)).json()
+        sendMessage(self.chat, result['result'])
+
+
 def sendMessage(chat_id, text):
     payload = {'chat_id': chat_id, 'text': text}
     result = telegram('sendMessage', payload)
     app.logger.debug("Answering:\n %s\n%s" % (payload, result.text))
-    
+
 
 def sendChatAction(chat_id, action):
     payload = {'chat_id': chat_id, 'action': action}
@@ -93,7 +96,7 @@ def sendChatAction(chat_id, action):
 
 @app.route('/telegram', methods=['POST'])
 def telegramWebHook():
-    m = Message(request.json)
+    Message(request.json)
     return ""
 
 """
