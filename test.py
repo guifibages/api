@@ -41,5 +41,25 @@ class ParsePing(unittest.TestCase):
         self.doTest(2)
 
 
+class Ping(unittest.TestCase):
+    def test_ping_ipv4(self):
+        ping = api.ping("127.0.0.1")
+        self.assertEqual(ping['status'], 0)
+
+    def test_ping_ipv6(self):
+        ping = api.ping("::1")
+        self.assertEqual(ping['status'], 0)
+
+
+class Traceroute(unittest.TestCase):
+    def test_traceroute_ipv4(self):
+        r = api.traceroute("127.0.0.1")
+        self.assertEqual(r['status'], 0)
+
+    def test_traceroute_ipv6(self):
+        r = api.traceroute("::1")
+        self.assertEqual(r['status'], 0)
+
+
 if __name__ == '__main__':
     unittest.main()

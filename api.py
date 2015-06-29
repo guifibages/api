@@ -22,38 +22,81 @@ import subprocess
 import ipaddress
 import re
 
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify
 app = Flask(__name__)
+
 
 @app.route('/ping/<ip>')
 @app.route('/ping/<ip>/<count>')
-@app.route('/ping/<ip>/<count>/<parsed>')
-def ping(ip, count = 2, format = "json"):
+def pinghandler(ip, count=2):
+    return jsonify(ping(ip, count))
+
+
+@app.route('/traceroute/<ip>')
+def traceroutehandler(ip):
+    return jsonify(traceroute(ip))
+
+
+def traceroute(ip):
     try:
         address = ipaddress.ip_address(ip)
-        command = ping
+        command = "traceroute"
         if isinstance(address, ipaddress.IPv6Address):
-            command = "ping6"
-        if (isinstance(address, ipaddress.IPv4Address) and
-            not address.is_private):
-            return jsonify(result=-1, text="Can only ping private IPv4 addresses (%s)" % ip)
+            command = "traceroute6"
+        if (isinstance(address, ipaddress.IPv4Address)
+            and not address.is_private):
+            return dict(result=-1,
+                        text="Can only ping private IPv4 addresses (%s)"
+                        % ip)
     except ValueError:
-        return jsonify(result=-1, text="Invalid IP address: %s" % ip)
+        return dict(result=-1, text="Invalid IP address: %s" % ip)
 
     try:
-        text = subprocess.check_output([command, '-c %d' % int(count), ip], universal_newlines=True)
+        text = subprocess.check_output([command, ip],
+                                       stderr=subprocess.STDOUT,
+                                       universal_newlines=True)
         result = 0
     except subprocess.CalledProcessError as e:
-        text = str(e.output)
+        text = e.output
         result = e.returncode
     except Exception as e:
-        text = str(e)
-        result =-1
-    return jsonify(status=result, ip=ip, result=parse_ping(text))
+        text = e
+        result = -1
+    return dict(status=result, ip=ip, result=text)
+
+
+def ping(ip, count=2):
+    try:
+        address = ipaddress.ip_address(ip)
+        command = "ping"
+        if isinstance(address, ipaddress.IPv6Address):
+            command = "ping6"
+        if (isinstance(address, ipaddress.IPv4Address)
+            and not address.is_private):
+            return dict(result=-1,
+                        text="Can only ping private IPv4 addresses (%s)"
+                        % ip)
+    except ValueError:
+        return dict(result=-1, text="Invalid IP address: %s" % ip)
+
+    try:
+        text = subprocess.check_output([command, '-c %d' % int(count), ip],
+                                       stderr=subprocess.STDOUT,
+                                       universal_newlines=True)
+        result = 0
+    except subprocess.CalledProcessError as e:
+        text = e.output
+        result = e.returncode
+    except Exception as e:
+        text = e
+        result = -1
+    return dict(status=result, ip=ip, result=parse_ping(text))
 
 
 def parse_ping(text):
-    match = re.search("\s(?P<packets>\d+)\spackets\stransmitted,\s(?P<received>\d+)\spackets\sreceived,\s(?P<loss>\d+%)\spacket\sloss", text, re.MULTILINE)
+    match = re.search("\s(?P<packets>\d+)\spackets\stransmitted,"
+                      "\s(?P<received>\d+)\spackets\sreceived,\s"
+                      "(?P<loss>\d+%)\spacket\sloss", text, re.MULTILINE)
     if match is None:
         return text
     return match.groupdict()
