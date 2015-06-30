@@ -44,25 +44,25 @@ def traceroute(ip):
         if isinstance(address, ipaddress.IPv6Address):
             command = "traceroute6"
         if (isinstance(address, ipaddress.IPv4Address)
-            and not address.is_private):
-            return dict(result=-1,
-                        text="Can only ping private IPv4 addresses (%s)"
-                        % ip)
+                and not address.is_private):
+            return dict(status=-1,
+                        text="Error: Can only ping private IPv4 addresses",
+                        ip=ip)
     except ValueError:
-        return dict(result=-1, text="Invalid IP address: %s" % ip)
+        return dict(status=-1, text="Error: Invalid IP address",  ip=ip)
 
     try:
         text = subprocess.check_output([command, ip],
                                        stderr=subprocess.STDOUT,
                                        universal_newlines=True)
-        result = 0
+        status = 0
     except subprocess.CalledProcessError as e:
         text = e.output
-        result = e.returncode
+        status = e.returncode
     except Exception as e:
         text = e
-        result = -1
-    return dict(status=result, ip=ip, result=text)
+        status = -1
+    return dict(status=status, ip=ip, text=text)
 
 
 def ping(ip, count=2):
@@ -72,25 +72,25 @@ def ping(ip, count=2):
         if isinstance(address, ipaddress.IPv6Address):
             command = "ping6"
         if (isinstance(address, ipaddress.IPv4Address)
-            and not address.is_private):
-            return dict(result=-1,
-                        text="Can only ping private IPv4 addresses (%s)"
-                        % ip)
+                and not address.is_private):
+            return dict(status=-1,
+                        text="Error: Can only ping private IPv4 addresses",
+                        ip=ip)
     except ValueError:
-        return dict(result=-1, text="Invalid IP address: %s" % ip)
+        return dict(status=-1, text="Error: Invalid IP address", ip=ip)
 
     try:
         text = subprocess.check_output([command, '-c %d' % int(count), ip],
                                        stderr=subprocess.STDOUT,
                                        universal_newlines=True)
-        result = 0
+        status = 0
     except subprocess.CalledProcessError as e:
         text = e.output
-        result = e.returncode
+        status = e.returncode
     except Exception as e:
         text = e
-        result = -1
-    return dict(status=result, ip=ip, result=parse_ping(text))
+        status = -1
+    return dict(status=status, ip=ip, text=parse_ping(text))
 
 
 def parse_ping(text):
