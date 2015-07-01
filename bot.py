@@ -66,20 +66,22 @@ class Message:
             getattr(self, self.command)()
             if "client" in globals():
                 sendChatAction(self.chat, "typing")
-        except AttributeError:
-            print("Exception on", self.command)
+        except Exception as e:
+            print("Exception on", self.command, e)
             sendMessage(self.chat,
                         "{0}: command not found".format(self.command))
 
     def ping(self):
         result = client.get("https://hq.xin.cat/gb/api/ping/{0}"
                             .format(self.args)).json()
-        sendMessage(self.chat, "ping: {0}".format(result))
+        msg = "ping {0}\n{1}".format(result['ip'], result['text'])
+        sendMessage(self.chat, msg)
 
     def traceroute(self):
         result = client.get("https://hq.xin.cat/gb/api/traceroute/{0}"
                             .format(self.args)).json()
-        sendMessage(self.chat, result['result'])
+        msg = "traceroute {0}\n{1}".format(result['ip'], result['text'])
+        sendMessage(self.chat, msg)
 
 
 def sendMessage(chat_id, text):
