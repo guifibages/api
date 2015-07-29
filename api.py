@@ -22,7 +22,11 @@ import subprocess
 import ipaddress
 import re
 
+
+from bs4 import BeautifulSoup
 from flask import Flask, jsonify
+import requests
+
 app = Flask(__name__)
 
 
@@ -35,6 +39,31 @@ def pinghandler(ip, count=2):
 @app.route('/traceroute/<ip>')
 def traceroutehandler(ip):
     return jsonify(traceroute(ip))
+
+
+@app.route('/ipinfo/<address>')
+def ipinfohandler(address):
+    info = ipinfo(address)
+    print(info)
+    return jsonify(info)
+
+
+def ipinfo(address):
+    network = ipaddress.ip_network('{}/27'.format(address), strict=False)
+    host = requests.get('http://guifi.net/ca/guifi/menu/ip/ipsearch/{}'.
+                        format(address))
+    s = BeautifulSoup(host.text)
+    h = s.find("th", text="nipv4").find_parent("table").find_all("td")
+    if len(h) == 0:
+        return {}
+    node = "{} (http://guifi.net{})".format(h[5].a.text, h[5].a["href"])
+    return {
+        'ip': address,
+        'network': str(network),
+        'broadcast': str(network.broadcast_address),
+        'netmask': str(network.hostmask),
+        'node': node
+    }
 
 
 def traceroute(ip):
