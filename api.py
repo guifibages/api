@@ -20,12 +20,14 @@
 
 import subprocess
 import ipaddress
+import os
 import re
 
-
 from bs4 import BeautifulSoup
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import requests
+
+import bot
 
 app = Flask(__name__)
 
@@ -48,6 +50,7 @@ def ipinfohandler(ip):
 
 
 def whois(ip):
+    print("whoising: " + ip)
     host = requests.get('http://guifi.net/ca/guifi/menu/ip/ipsearch/{}'.
                         format(ip))
     s = BeautifulSoup(host.text)
@@ -65,11 +68,6 @@ def traceroute(ip):
         command = "traceroute"
         if isinstance(address, ipaddress.IPv6Address):
             command = "traceroute6"
-        if (isinstance(address, ipaddress.IPv4Address)
-                and not address.is_private):
-            return dict(status=-1,
-                        text="Error: Can only ping private IPv4 addresses",
-                        ip=ip)
     except ValueError:
         return dict(status=-1, text="Error: Invalid IP address",  ip=ip)
 
@@ -93,11 +91,6 @@ def ping(ip, count=2):
         command = "ping"
         if isinstance(address, ipaddress.IPv6Address):
             command = "ping6"
-        if (isinstance(address, ipaddress.IPv4Address)
-                and not address.is_private):
-            return dict(status=-1,
-                        text="Error: Can only ping private IPv4 addresses",
-                        ip=ip)
     except ValueError:
         return dict(status=-1, text="Error: Invalid IP address", ip=ip)
 
@@ -124,5 +117,14 @@ def parse_ping(text):
     return match.groupdict()
 
 
+@app.route('/telegram', methods=['POST'])
+def telegramWebHook():
+    bot.Message(request.json)
+    return ""
+
+
 if __name__ == "__main__":
+    bot.token = os.environ['TELEGRAM_TOKEN']
+    bot.app = app
+    client = requests.Session()
     app.run(debug=True, port=8060, host="0.0.0.0")

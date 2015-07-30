@@ -18,27 +18,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flask import Flask, request
 import requests
 
-app = Flask(__name__)
-
-
-def getToken():
-    if "client" in globals():
-        try:
-            r = client.get("http://172.17.42.1:4001/v2/keys/guifibages.net/bot/token")
-            token = r.json['node']['value']
-        except:
-            with open("token", "r") as myfile:
-                token = myfile.read().strip()
-    return token
+import api
 
 
 def telegram(action, payload):
-    url = "https://api.telegram.org/bot%s/%s" % (token, action)
+    print("telegramming: |{}| {}".format(token, action))
+    url = "https://api.telegram.org/bot{}/{}".format(token, action)
     app.logger.debug("url: %s" % url)
-    return client.post(url, data=payload)
+    return requests.post(url, data=payload)
 
 
 class Message:
@@ -53,10 +42,7 @@ class Message:
             app.logger.error("Cannot parse:\n %s\n %s", self.message, e)
 
     def parse(self):
-        if self.is_group:
-            self.text = self.message['text'].split(None, 1)[1]
-        else:
-            self.text = self.message['text']
+        self.text = self.message['text']
         if self.text[0] != "/" or " " not in self.text:
             return
         self.command, self.args = self.text.split(None, 1)
@@ -64,28 +50,24 @@ class Message:
         try:
             print("Trying", self.command)
             getattr(self, self.command)()
-            if "client" in globals():
-                sendChatAction(self.chat, "typing")
         except Exception as e:
             print("Exception on", self.command, e)
             sendMessage(self.chat,
                         "{0}: command not found".format(self.command))
 
     def whois(self):
-        result = client.get("https://hq.xin.cat/gb/api/whois/{0}"
-                            .format(self.args)).json()
+        result = api.whois(self.args)
+        print("whois result: {}".format(result))
         msg = "whois {0}\n{1}".format(result['ip'], result['text'])
         sendMessage(self.chat, msg)
 
     def ping(self):
-        result = client.get("https://hq.xin.cat/gb/api/ping/{0}"
-                            .format(self.args)).json()
+        result = api.ping(self.args)
         msg = "ping {0}\n{1}".format(result['ip'], result['text'])
         sendMessage(self.chat, msg)
 
     def traceroute(self):
-        result = client.get("https://hq.xin.cat/gb/api/traceroute/{0}"
-                            .format(self.args)).json()
+        result = api.traceroute(self.args)
         msg = "traceroute {0}\n{1}".format(result['ip'], result['text'])
         sendMessage(self.chat, msg)
 
@@ -100,21 +82,3 @@ def sendChatAction(chat_id, action):
     payload = {'chat_id': chat_id, 'action': action}
     result = telegram('sendChatAction', payload)
     app.logger.debug("Answering:\n %s\n%s" % (payload, result))
-
-
-@app.route('/telegram', methods=['POST'])
-def telegramWebHook():
-    Message(request.json)
-    return ""
-
-"""
-except:
-        resp=jsonify({'error': 'Malformed message'})
-        resp.status_code = 400
-        return resp
-"""
-
-if __name__ == "__main__":
-    client = requests.Session()
-    token = getToken()
-    app.run(debug=True, port=8050, host="0.0.0.0")
