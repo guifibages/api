@@ -71,6 +71,12 @@ class Message:
             sendMessage(self.chat,
                         "{0}: command not found".format(self.command))
 
+    def whois(self):
+        result = client.get("https://hq.xin.cat/gb/api/whois/{0}"
+                            .format(self.args)).json()
+        msg = "whois {0}\n{1}".format(result['ip'], result['text'])
+        sendMessage(self.chat, msg)
+
     def ping(self):
         result = client.get("https://hq.xin.cat/gb/api/ping/{0}"
                             .format(self.args)).json()
