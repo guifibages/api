@@ -41,29 +41,22 @@ def traceroutehandler(ip):
     return jsonify(traceroute(ip))
 
 
-@app.route('/ipinfo/<address>')
-def ipinfohandler(address):
-    info = ipinfo(address)
-    print(info)
+@app.route('/whois/<ip>')
+def ipinfohandler(ip):
+    info = whois(ip)
     return jsonify(info)
 
 
-def ipinfo(address):
-    network = ipaddress.ip_network('{}/27'.format(address), strict=False)
+def whois(ip):
     host = requests.get('http://guifi.net/ca/guifi/menu/ip/ipsearch/{}'.
-                        format(address))
+                        format(ip))
     s = BeautifulSoup(host.text)
     h = s.find("th", text="nipv4").find_parent("table").find_all("td")
     if len(h) == 0:
-        return {}
+        return dict(status=-1, ip=ip, text="Not found")
     node = "{} (http://guifi.net{})".format(h[5].a.text, h[5].a["href"])
-    return {
-        'ip': address,
-        'network': str(network),
-        'broadcast': str(network.broadcast_address),
-        'netmask': str(network.hostmask),
-        'node': node
-    }
+    status = 0
+    return dict(status=status, ip=ip, text="Node: {}".format(node))
 
 
 def traceroute(ip):
