@@ -1,4 +1,4 @@
-FROM python:3-onbuild
+FROM guifibages/python
 
 MAINTAINER Ignacio Torres Masdeu <i@itorres.net>
 
