@@ -33,9 +33,13 @@ def telegram(action, payload):
 class Message:
     def __init__(self, d):
         vars(self).update(d)
-        self.chat = self.message['chat']['id']
+        if 'edited_message' in d:
+            self.message = self.edited_message
+        try:
+            self.chat = self.message['chat']['id']
+        except AttributeError:
+            app.logger.error("No message in payload:\n %s", d)
         self.is_group = "title" in self.message['chat']
-        self.commands = ['ping', 'traceroute']
         try:
             self.parse()
         except Exception as e:
