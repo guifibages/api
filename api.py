@@ -53,7 +53,7 @@ def whois(ip):
     print("whoising: " + ip)
     host = requests.get('http://guifi.net/ca/guifi/menu/ip/ipsearch/{}'.
                         format(ip))
-    s = BeautifulSoup(host.text)
+    s = BeautifulSoup(host.text, "html.parser")
     h = s.find("th", text="nipv4").find_parent("table").find_all("td")
     if len(h) == 0:
         return dict(status=-1, ip=ip, text="Not found")
