@@ -50,10 +50,13 @@ class Message:
         try:
             print("Trying", self.command)
             getattr(self, self.command)()
+        except AttributeError:
+            sendMessage(self.chat,
+                        "{0}: command not found".format(self.command))
         except Exception as e:
             print("Exception on", self.command, e)
             sendMessage(self.chat,
-                        "{0}: command not found".format(self.command))
+                        "Error executing `{0}`".format(self.text))
 
     def whois(self):
         result = api.whois(self.args)
