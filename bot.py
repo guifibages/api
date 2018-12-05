@@ -67,6 +67,9 @@ class Message:
         sendMessage(self.chat, msg)
 
     def traceroute(self):
+        self.mtr()
+
+    def mtr(self):
         result = api.traceroute(self.args)
         msg = "traceroute {0}\n{1}".format(result['ip'], result['text'])
         sendMessage(self.chat, msg)

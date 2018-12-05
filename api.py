@@ -40,7 +40,7 @@ def pinghandler(ip, count=2):
 
 @app.route('/traceroute/<ip>')
 def traceroutehandler(ip):
-    return jsonify(traceroute(ip))
+    return jsonify(mtr(ip))
 
 
 @app.route('/whois/<ip>')
@@ -61,18 +61,17 @@ def whois(ip):
     status = 0
     return dict(status=status, ip=ip, text="Node: {}".format(node))
 
-
 def traceroute(ip):
+    return mtr(ip)
+
+def mtr(ip):
     try:
         address = ipaddress.ip_address(ip)
-        command = "traceroute"
-        if isinstance(address, ipaddress.IPv6Address):
-            command = "traceroute6"
     except ValueError:
         return dict(status=-1, text="Error: Invalid IP address",  ip=ip)
 
     try:
-        text = subprocess.check_output([command, ip],
+        text = subprocess.check_output(["mtr", "-r", "-c", "1", ip],
                                        stderr=subprocess.STDOUT,
                                        universal_newlines=True)
         status = 0
