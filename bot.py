@@ -83,7 +83,7 @@ class Message:
 
 
 def sendMessage(chat_id, text):
-    payload = {'chat_id': chat_id, 'text': text}
+    payload = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
     result = telegram('sendMessage', payload)
     app.logger.debug("Answering:\n %s\n%s" % (payload, result.text))
 
